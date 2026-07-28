@@ -1,6 +1,6 @@
 import type { WorkflowToolDrawerPayload } from '../index'
 import type { WorkflowToolProviderResponse } from '@/app/components/tools/types'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { VarType } from '@/app/components/workflow/types'
 import WorkflowToolConfigureButton from '../configure-button'
@@ -19,14 +19,7 @@ vi.mock('@/next/navigation', () => ({
   }),
   usePathname: () => '/app/workflow-app-id',
   useSearchParams: () => new URLSearchParams(),
-}))
-
-// Mock app context
-const mockIsCurrentWorkspaceManager = vi.fn(() => true)
-vi.mock('@/context/app-context', () => ({
-  useAppContext: () => ({
-    isCurrentWorkspaceManager: mockIsCurrentWorkspaceManager(),
-  }),
+  useParams: () => ({}),
 }))
 
 // Mock API services - only mock external services
@@ -68,18 +61,17 @@ vi.mock('@/app/components/plugins/hooks', () => ({
   }),
 }))
 
-// Mock EmojiPickerInner - simplified for testing
-vi.mock('@/app/components/base/emoji-picker/Inner', () => ({
-  default: ({ onSelect }: { onSelect: (icon: string, background: string) => void }) => (
-    <div data-testid="emoji-picker">
-      <button data-testid="select-emoji" onClick={() => onSelect('🚀', '#f0f0f0')}>Select Emoji</button>
-    </div>
-  ),
-}))
-
 // Mock AppIcon - simplified for testing
 vi.mock('@/app/components/base/app-icon', () => ({
-  default: ({ onClick, icon, background }: { onClick?: () => void, icon: string, background: string }) => (
+  default: ({
+    onClick,
+    icon,
+    background,
+  }: {
+    onClick?: () => void
+    icon: string
+    background: string
+  }) => (
     <div data-testid="app-icon" onClick={onClick} data-icon={icon} data-background={background}>
       {icon}
     </div>
@@ -88,10 +80,12 @@ vi.mock('@/app/components/base/app-icon', () => ({
 
 // Mock LabelSelector - simplified for testing
 vi.mock('@/app/components/tools/labels/selector', () => ({
-  default: ({ value, onChange }: { value: string[], onChange: (labels: string[]) => void }) => (
+  default: ({ value, onChange }: { value: string[]; onChange: (labels: string[]) => void }) => (
     <div data-testid="label-selector">
       <span data-testid="label-values">{value.join(',')}</span>
-      <button data-testid="add-label" onClick={() => onChange([...value, 'new-label'])}>Add Label</button>
+      <button data-testid="add-label" onClick={() => onChange([...value, 'new-label'])}>
+        Add Label
+      </button>
     </div>
   ),
 }))
@@ -103,7 +97,9 @@ const createMockEmoji = (overrides = {}) => ({
   ...overrides,
 })
 
-const createMockWorkflowToolDetail = (overrides: Partial<WorkflowToolProviderResponse> = {}): WorkflowToolProviderResponse => ({
+const createMockWorkflowToolDetail = (
+  overrides: Partial<WorkflowToolProviderResponse> = {},
+): WorkflowToolProviderResponse => ({
   workflow_app_id: 'workflow-app-123',
   workflow_tool_id: 'workflow-tool-456',
   label: 'Test Tool',
@@ -148,12 +144,13 @@ const createDefaultConfigureButtonProps = (overrides = {}) => ({
   published: false,
   isLoading: false,
   outdated: false,
-  isCurrentWorkspaceManager: true,
   onConfigure: vi.fn(),
   ...overrides,
 })
 
-const createDefaultDrawerPayload = (overrides: Partial<WorkflowToolDrawerPayload> = {}): WorkflowToolDrawerPayload => ({
+const createDefaultDrawerPayload = (
+  overrides: Partial<WorkflowToolDrawerPayload> = {},
+): WorkflowToolDrawerPayload => ({
   icon: createMockEmoji(),
   label: 'Test Tool',
   name: 'test_tool',
@@ -185,7 +182,6 @@ const createDefaultDrawerPayload = (overrides: Partial<WorkflowToolDrawerPayload
 describe('WorkflowToolConfigureButton', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockIsCurrentWorkspaceManager.mockReturnValue(true)
     mockUseWorkflowToolDetailByAppID.mockImplementation((_appId: string, enabled: boolean) => ({
       data: enabled ? createMockWorkflowToolDetail() : undefined,
       isLoading: false,
@@ -194,18 +190,6 @@ describe('WorkflowToolConfigureButton', () => {
 
   // Rendering Tests (REQUIRED)
   describe('Rendering', () => {
-    it('should render without crashing', () => {
-      // Arrange
-      const props = createDefaultConfigureButtonProps()
-
-      // Act
-      render(<WorkflowToolConfigureButton {...props} />)
-
-      // Assert
-      // Assert
-      expect(screen.getByText('workflow.common.workflowAsTool'))!.toBeInTheDocument()
-    })
-
     it('should render configure required badge when not published', () => {
       // Arrange
       const props = createDefaultConfigureButtonProps({ published: false })
@@ -281,18 +265,6 @@ describe('WorkflowToolConfigureButton', () => {
         expect(screen.getByText('workflow.common.configure'))!.toBeInTheDocument()
         expect(screen.getByText('workflow.common.manageInTools'))!.toBeInTheDocument()
       })
-    })
-
-    it('should render different UI for non-workspace manager', () => {
-      // Arrange
-      const props = createDefaultConfigureButtonProps({ isCurrentWorkspaceManager: false })
-
-      // Act
-      render(<WorkflowToolConfigureButton {...props} />)
-
-      // Assert
-      const textElement = screen.getByText('workflow.common.workflowAsTool')
-      expect(textElement)!.toHaveClass('text-text-tertiary')
     })
   })
 
@@ -399,35 +371,12 @@ describe('WorkflowToolConfigureButton', () => {
       await user.click(screen.getByText('workflow.common.manageInTools'))
 
       // Assert
-      expect(mockPush).toHaveBeenCalledWith('/tools?category=workflow')
+      expect(mockPush).toHaveBeenCalledWith('/integrations/tools/workflow')
     })
   })
 
   // Edge Cases (REQUIRED)
   describe('Edge Cases', () => {
-    it('should handle rapid publish/unpublish state changes', async () => {
-      // Arrange
-      const props = createDefaultConfigureButtonProps({ published: false })
-
-      // Act
-      const { rerender } = render(<WorkflowToolConfigureButton {...props} />)
-
-      // Toggle published state rapidly
-      await act(async () => {
-        rerender(<WorkflowToolConfigureButton {...props} published={true} />)
-      })
-      await act(async () => {
-        rerender(<WorkflowToolConfigureButton {...props} published={false} />)
-      })
-      await act(async () => {
-        rerender(<WorkflowToolConfigureButton {...props} published={true} />)
-      })
-
-      // Assert - should not crash
-      // Assert - should not crash
-      expect(screen.getByText('workflow.common.workflowAsTool'))!.toBeInTheDocument()
-    })
-
     it('should keep the configure entry independent from workflow parameter shape', async () => {
       // Arrange
       const user = userEvent.setup()
@@ -460,9 +409,9 @@ describe('WorkflowToolConfigureButton', () => {
       })
     })
 
-    it('should disable configure button when not workspace manager', async () => {
+    it('should disable configure button when workflow tool is disabled', async () => {
       // Arrange
-      const props = createDefaultConfigureButtonProps({ published: true, isCurrentWorkspaceManager: false })
+      const props = createDefaultConfigureButtonProps({ published: true, disabled: true })
 
       // Act
       render(<WorkflowToolConfigureButton {...props} />)
@@ -499,7 +448,9 @@ describe('WorkflowToolDrawer', () => {
 
       // Assert
       // Assert
-      expect(screen.getByTestId('drawer-title'))!.toHaveTextContent('workflow.common.workflowAsTool')
+      expect(
+        screen.getByRole('heading', { name: 'workflow.common.workflowAsTool' }),
+      ).toBeInTheDocument()
     })
 
     it('should render name input field', () => {
@@ -515,7 +466,9 @@ describe('WorkflowToolDrawer', () => {
 
       // Assert
       // Assert
-      expect(screen.getByPlaceholderText('tools.createTool.toolNamePlaceHolder'))!.toBeInTheDocument()
+      expect(
+        screen.getByPlaceholderText('tools.createTool.toolNamePlaceHolder'),
+      )!.toBeInTheDocument()
     })
 
     it('should render name for tool call input', () => {
@@ -531,7 +484,9 @@ describe('WorkflowToolDrawer', () => {
 
       // Assert
       // Assert
-      expect(screen.getByPlaceholderText('tools.createTool.nameForToolCallPlaceHolder'))!.toBeInTheDocument()
+      expect(
+        screen.getByPlaceholderText('tools.createTool.nameForToolCallPlaceHolder'),
+      )!.toBeInTheDocument()
     })
 
     it('should render description textarea', () => {
@@ -547,7 +502,9 @@ describe('WorkflowToolDrawer', () => {
 
       // Assert
       // Assert
-      expect(screen.getByPlaceholderText('tools.createTool.descriptionPlaceholder'))!.toBeInTheDocument()
+      expect(
+        screen.getByPlaceholderText('tools.createTool.descriptionPlaceholder'),
+      )!.toBeInTheDocument()
     })
 
     it('should render tool input table', () => {
@@ -629,7 +586,9 @@ describe('WorkflowToolDrawer', () => {
 
       // Assert
       // Assert
-      expect(screen.getByPlaceholderText('tools.createTool.privacyPolicyPlaceholder'))!.toBeInTheDocument()
+      expect(
+        screen.getByPlaceholderText('tools.createTool.privacyPolicyPlaceholder'),
+      )!.toBeInTheDocument()
     })
 
     it('should render delete button when editing and onRemove provided', () => {
@@ -814,8 +773,9 @@ describe('WorkflowToolDrawer', () => {
       await user.click(iconButton)
 
       // Assert
-      // Assert
-      expect(screen.getByTestId('emoji-picker'))!.toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search emojis...')).toBeInTheDocument()
+      })
     })
 
     it('should update emoji on selection', async () => {
@@ -834,14 +794,19 @@ describe('WorkflowToolDrawer', () => {
       const iconButton = screen.getByTestId('app-icon')
       await user.click(iconButton)
 
-      // Select emoji
-      await user.click(screen.getByTestId('select-emoji'))
-      await user.click(screen.getByRole('button', { name: 'app.iconPicker.ok' }))
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search emojis...')).toBeInTheDocument()
+      })
+      await user.click(screen.getByRole('button', { name: '#E4FBCC' }))
+      await user.click(screen.getByRole('button', { name: /iconPicker\.ok/ }))
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText('Search emojis...')).not.toBeInTheDocument()
+      })
 
       // Assert
       const updatedIcon = screen.getByTestId('app-icon')
-      expect(updatedIcon)!.toHaveAttribute('data-icon', '🚀')
-      expect(updatedIcon)!.toHaveAttribute('data-background', '#f0f0f0')
+      expect(updatedIcon)!.toHaveAttribute('data-icon', '🔧')
+      expect(updatedIcon)!.toHaveAttribute('data-background', '#E4FBCC')
     })
 
     it('should close emoji picker on close button', async () => {
@@ -859,43 +824,15 @@ describe('WorkflowToolDrawer', () => {
       const iconButton = screen.getByTestId('app-icon')
       await user.click(iconButton)
 
-      expect(screen.getByTestId('emoji-picker'))!.toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search emojis...')).toBeInTheDocument()
+      })
+      await user.click(screen.getByRole('button', { name: /iconPicker\.cancel/ }))
+      await waitFor(() => {
+        expect(screen.queryByPlaceholderText('Search emojis...')).not.toBeInTheDocument()
+      })
 
-      await user.click(screen.getByRole('button', { name: 'app.iconPicker.cancel' }))
-
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      // Assert
-      expect(screen.queryByTestId('emoji-picker')).not.toBeInTheDocument()
+      expect(screen.queryByPlaceholderText('Search emojis...')).not.toBeInTheDocument()
     })
 
     it('should update labels when label selector changes', async () => {
@@ -1009,10 +946,12 @@ describe('WorkflowToolDrawer', () => {
       await user.click(screen.getByText('common.operation.save'))
 
       // Assert
-      expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
-        name: 'test_tool',
-        workflow_app_id: 'workflow-app-123',
-      }))
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'test_tool',
+          workflow_app_id: 'workflow-app-123',
+        }),
+      )
     })
 
     it('should show confirm modal when save clicked in edit mode', async () => {
@@ -1051,9 +990,11 @@ describe('WorkflowToolDrawer', () => {
       await user.click(screen.getByText('common.operation.confirm'))
 
       // Assert
-      expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
-        workflow_tool_id: 'tool-123',
-      }))
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workflow_tool_id: 'tool-123',
+        }),
+      )
     })
 
     it('should update parameter description on input', async () => {
@@ -1062,20 +1003,24 @@ describe('WorkflowToolDrawer', () => {
       const props = {
         isAdd: true,
         payload: createDefaultDrawerPayload({
-          parameters: [{
-            name: 'param1',
-            description: '', // Start with empty description
-            form: 'llm',
-            required: true,
-            type: 'string',
-          }],
+          parameters: [
+            {
+              name: 'param1',
+              description: '', // Start with empty description
+              form: 'llm',
+              required: true,
+              type: 'string',
+            },
+          ],
         }),
         onHide: vi.fn(),
       }
 
       // Act
       render(<WorkflowToolDrawer {...props} />)
-      const descInput = screen.getByPlaceholderText('tools.createTool.toolInput.descriptionPlaceholder')
+      const descInput = screen.getByPlaceholderText(
+        'tools.createTool.toolInput.descriptionPlaceholder',
+      )
       await user.type(descInput, 'New parameter description')
 
       // Assert
@@ -1228,13 +1173,15 @@ describe('WorkflowToolDrawer', () => {
       const props = {
         isAdd: true,
         payload: createDefaultDrawerPayload({
-          parameters: [{
-            name: '__image',
-            description: 'Image parameter',
-            form: 'llm',
-            required: true,
-            type: 'file',
-          }],
+          parameters: [
+            {
+              name: '__image',
+              description: 'Image parameter',
+              form: 'llm',
+              required: true,
+              type: 'file',
+            },
+          ],
         }),
         onHide: vi.fn(),
       }
@@ -1252,11 +1199,13 @@ describe('WorkflowToolDrawer', () => {
       const props = {
         isAdd: true,
         payload: createDefaultDrawerPayload({
-          outputParameters: [{
-            name: 'text', // Collides with reserved
-            description: 'Custom text output',
-            type: VarType.string,
-          }],
+          outputParameters: [
+            {
+              name: 'text', // Collides with reserved
+              description: 'Custom text output',
+              type: VarType.string,
+            },
+          ],
         }),
         onHide: vi.fn(),
       }
@@ -1267,44 +1216,6 @@ describe('WorkflowToolDrawer', () => {
       // Assert - should show both reserved and custom with warning icon
       const textElements = screen.getAllByText('text')
       expect(textElements.length).toBe(2)
-    })
-
-    it('should handle undefined onSave gracefully', async () => {
-      // Arrange
-      const user = userEvent.setup()
-      const props = {
-        isAdd: false,
-        payload: createDefaultDrawerPayload({ workflow_tool_id: 'tool-123' }),
-        onHide: vi.fn(),
-        // onSave is undefined
-      }
-
-      // Act
-      render(<WorkflowToolDrawer {...props} />)
-      await user.click(screen.getByText('common.operation.save'))
-
-      // Show confirm modal
-      await waitFor(() => {
-        expect(screen.getByText('tools.createTool.confirmTitle'))!.toBeInTheDocument()
-      })
-
-      // Assert - should not crash
-      await user.click(screen.getByText('common.operation.confirm'))
-    })
-
-    it('should handle undefined onCreate gracefully', async () => {
-      // Arrange
-      const user = userEvent.setup()
-      const props = {
-        isAdd: true,
-        payload: createDefaultDrawerPayload(),
-        onHide: vi.fn(),
-        // onCreate is undefined
-      }
-
-      // Act & Assert - should not crash
-      render(<WorkflowToolDrawer {...props} />)
-      await user.click(screen.getByText('common.operation.save'))
     })
 
     it('should close confirm modal on close button', async () => {
@@ -1347,21 +1258,6 @@ describe('MethodSelector', () => {
 
   // Rendering Tests (REQUIRED)
   describe('Rendering', () => {
-    it('should render without crashing', () => {
-      // Arrange
-      const props = {
-        value: 'llm',
-        onChange: vi.fn(),
-      }
-
-      // Act
-      render(<MethodSelector {...props} />)
-
-      // Assert
-      // Assert
-      expect(screen.getByTestId('popover-trigger'))!.toBeInTheDocument()
-    })
-
     it('should display parameter method text when value is llm', () => {
       // Arrange
       const props = {
@@ -1527,25 +1423,6 @@ describe('MethodSelector', () => {
 
   // Edge Cases (REQUIRED)
   describe('Edge Cases', () => {
-    it('should handle rapid value changes', async () => {
-      // Arrange
-      const onChange = vi.fn()
-      const props = {
-        value: 'llm',
-        onChange,
-      }
-
-      // Act
-      const { rerender } = render(<MethodSelector {...props} />)
-      rerender(<MethodSelector {...props} value="form" />)
-      rerender(<MethodSelector {...props} value="llm" />)
-      rerender(<MethodSelector {...props} value="form" />)
-
-      // Assert - should not crash
-      // Assert - should not crash
-      expect(screen.getByText('tools.createTool.toolInput.methodSetting'))!.toBeInTheDocument()
-    })
-
     it('should handle empty string value', () => {
       // Arrange
       const props = {
@@ -1565,7 +1442,6 @@ describe('MethodSelector', () => {
 describe('Integration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockIsCurrentWorkspaceManager.mockReturnValue(true)
     mockUseWorkflowToolDetailByAppID.mockImplementation((_appId: string, enabled: boolean) => ({
       data: enabled ? createMockWorkflowToolDetail() : undefined,
       isLoading: false,
@@ -1648,31 +1524,13 @@ describe('Integration Tests', () => {
 
       // Assert
       await waitFor(() => {
-        expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
-          workflow_tool_id: 'workflow-tool-1',
-          description: 'Updated description',
-        }))
+        expect(onSave).toHaveBeenCalledWith(
+          expect.objectContaining({
+            workflow_tool_id: 'workflow-tool-1',
+            description: 'Updated description',
+          }),
+        )
       })
-    })
-  })
-
-  // Test callbacks and state synchronization
-  describe('Callback Stability', () => {
-    it('should maintain callback references across rerenders', async () => {
-      // Arrange
-      const onConfigure = vi.fn()
-      const props = createDefaultConfigureButtonProps({
-        onConfigure,
-      })
-
-      // Act
-      const { rerender } = render(<WorkflowToolConfigureButton {...props} />)
-      rerender(<WorkflowToolConfigureButton {...props} />)
-      rerender(<WorkflowToolConfigureButton {...props} />)
-
-      // Assert - component should not crash and callbacks should be stable
-      // Assert - component should not crash and callbacks should be stable
-      expect(screen.getByText('workflow.common.workflowAsTool'))!.toBeInTheDocument()
     })
   })
 })

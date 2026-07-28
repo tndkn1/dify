@@ -1,10 +1,13 @@
 import type { BlockEnum, ToolWithProvider } from '../types'
-import type { ToolDefaultValue, ToolTypeEnum, ToolValue } from './types'
+import type { ToolActionPreviewPayload } from './tool/action-item'
+import type { ToolDefaultValue, ToolType, ToolValue } from './types'
 import { cn } from '@langgenius/dify-ui/cn'
+import { createPreviewCardHandle, PreviewCard } from '@langgenius/dify-ui/preview-card'
 import { memo, useMemo, useRef } from 'react'
 import Empty from '@/app/components/tools/provider/empty'
 import { useGetLanguage } from '@/context/i18n'
 import IndexBar, { groupItems } from './index-bar'
+import { ToolActionPreviewCard } from './tool/action-item'
 import ToolListFlatView from './tool/tool-list-flat-view/list'
 import ToolListTreeView from './tool/tool-list-tree-view/list'
 import { ViewType } from './view-type-select'
@@ -16,7 +19,7 @@ type ToolsProps = {
   tools: ToolWithProvider[]
   viewType: ViewType
   hasSearchText: boolean
-  toolType?: ToolTypeEnum
+  toolType?: ToolType
   isAgent?: boolean
   className?: string
   indexBarClassName?: string
@@ -35,8 +38,8 @@ const Tools = ({
   indexBarClassName,
   selectedTools,
 }: ToolsProps) => {
-  // const tools: any = []
   const language = useGetLanguage()
+  const previewCardHandle = useMemo(() => createPreviewCardHandle<ToolActionPreviewPayload>(), [])
   const isFlatView = viewType === ViewType.flat
   const isShowLetterIndex = isFlatView && tools.length > 10
 
@@ -56,13 +59,15 @@ const Tools = ({
     }
   }
   */
-  const { letters, groups: withLetterAndGroupViewToolsData } = groupItems(tools, tool => tool.label[language]![0]!)
+  const { letters, groups: withLetterAndGroupViewToolsData } = groupItems(
+    tools,
+    (tool) => tool.label[language]![0]!,
+  )
   const treeViewToolsData = useMemo(() => {
     const result: Record<string, ToolWithProvider[]> = {}
     Object.keys(withLetterAndGroupViewToolsData).forEach((letter) => {
       Object.keys(withLetterAndGroupViewToolsData[letter]!).forEach((groupName) => {
-        if (!result[groupName])
-          result[groupName] = []
+        if (!result[groupName]) result[groupName] = []
         result[groupName].push(...(withLetterAndGroupViewToolsData[letter]![groupName] ?? []))
       })
     })
@@ -73,19 +78,21 @@ const Tools = ({
     const result: ToolWithProvider[] = []
     letters.forEach((letter) => {
       Object.keys(withLetterAndGroupViewToolsData[letter]!).forEach((groupName) => {
-        result.push(...withLetterAndGroupViewToolsData[letter]![groupName]!.map((item) => {
-          return {
-            ...item,
-            letter,
-          }
-        }))
+        result.push(
+          ...withLetterAndGroupViewToolsData[letter]![groupName]!.map((item) => {
+            return {
+              ...item,
+              letter,
+            }
+          }),
+        )
       })
     })
 
     return result
   }, [withLetterAndGroupViewToolsData, letters])
 
-  const toolRefs = useRef({})
+  const toolRefsRef = useRef<Record<string, HTMLDivElement | null>>({})
 
   return (
     <div className={cn('max-w-full p-1', className)}>
@@ -94,33 +101,39 @@ const Tools = ({
           <Empty type={toolType!} isAgent={isAgent} />
         </div>
       )}
-      {!!tools.length && (
-        isFlatView
-          ? (
-              <ToolListFlatView
-                toolRefs={toolRefs}
-                letters={letters}
-                payload={listViewToolData}
-                isShowLetterIndex={isShowLetterIndex}
-                hasSearchText={hasSearchText}
-                onSelect={onSelect}
-                canNotSelectMultiple={canNotSelectMultiple}
-                onSelectMultiple={onSelectMultiple}
-                selectedTools={selectedTools}
-                indexBar={<IndexBar letters={letters} itemRefs={toolRefs} className={indexBarClassName} />}
-              />
-            )
-          : (
-              <ToolListTreeView
-                payload={treeViewToolsData}
-                hasSearchText={hasSearchText}
-                onSelect={onSelect}
-                canNotSelectMultiple={canNotSelectMultiple}
-                onSelectMultiple={onSelectMultiple}
-                selectedTools={selectedTools}
-              />
-            )
-      )}
+      {!!tools.length &&
+        (isFlatView ? (
+          <ToolListFlatView
+            toolRefs={toolRefsRef}
+            letters={letters}
+            payload={listViewToolData}
+            previewCardHandle={previewCardHandle}
+            isShowLetterIndex={isShowLetterIndex}
+            hasSearchText={hasSearchText}
+            onSelect={onSelect}
+            canNotSelectMultiple={canNotSelectMultiple}
+            onSelectMultiple={onSelectMultiple}
+            selectedTools={selectedTools}
+            indexBar={
+              <IndexBar letters={letters} itemRefs={toolRefsRef} className={indexBarClassName} />
+            }
+          />
+        ) : (
+          <ToolListTreeView
+            payload={treeViewToolsData}
+            previewCardHandle={previewCardHandle}
+            hasSearchText={hasSearchText}
+            onSelect={onSelect}
+            canNotSelectMultiple={canNotSelectMultiple}
+            onSelectMultiple={onSelectMultiple}
+            selectedTools={selectedTools}
+          />
+        ))}
+      <PreviewCard handle={previewCardHandle}>
+        {({ payload }) => (
+          <ToolActionPreviewCard payload={payload as ToolActionPreviewPayload | undefined} />
+        )}
+      </PreviewCard>
     </div>
   )
 }

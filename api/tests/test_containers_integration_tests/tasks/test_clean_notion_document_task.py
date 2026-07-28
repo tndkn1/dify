@@ -90,8 +90,9 @@ class TestCleanNotionDocumentTask:
             name=fake.name(),
             interface_language="en-US",
             password=generate_valid_password(fake),
+            session=db_session_with_containers,
         )
-        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company(), session=db_session_with_containers)
         tenant = account.current_tenant
 
         # Create dataset
@@ -132,11 +133,10 @@ class TestCleanNotionDocumentTask:
             db_session_with_containers.add(document)
             db_session_with_containers.flush()
             document_ids.append(document.id)
-
+            assert tenant
             # Create segments for each document
             for j in range(2):
                 segment = DocumentSegment(
-                    id=str(uuid.uuid4()),
                     tenant_id=tenant.id,
                     dataset_id=dataset.id,
                     document_id=document.id,
@@ -212,8 +212,9 @@ class TestCleanNotionDocumentTask:
             name=fake.name(),
             interface_language="en-US",
             password=generate_valid_password(fake),
+            session=db_session_with_containers,
         )
-        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company(), session=db_session_with_containers)
         tenant = account.current_tenant
 
         # Create dataset
@@ -238,6 +239,7 @@ class TestCleanNotionDocumentTask:
         # args: (dataset, total_index_node_ids)
         assert isinstance(args[0], Dataset)
         assert args[1] == []
+        assert kwargs["session"] is not None
 
     def test_clean_notion_document_task_with_different_index_types(
         self, db_session_with_containers: Session, mock_index_processor_factory, mock_external_service_dependencies
@@ -256,8 +258,9 @@ class TestCleanNotionDocumentTask:
             name=fake.name(),
             interface_language="en-US",
             password=generate_valid_password(fake),
+            session=db_session_with_containers,
         )
-        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company(), session=db_session_with_containers)
         tenant = account.current_tenant
 
         # Test different index types
@@ -297,10 +300,9 @@ class TestCleanNotionDocumentTask:
             )
             db_session_with_containers.add(document)
             db_session_with_containers.flush()
-
+            assert tenant
             # Create test segment
             segment = DocumentSegment(
-                id=str(uuid.uuid4()),
                 tenant_id=tenant.id,
                 dataset_id=dataset.id,
                 document_id=document.id,
@@ -344,8 +346,9 @@ class TestCleanNotionDocumentTask:
             name=fake.name(),
             interface_language="en-US",
             password=generate_valid_password(fake),
+            session=db_session_with_containers,
         )
-        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company(), session=db_session_with_containers)
         tenant = account.current_tenant
 
         # Create dataset
@@ -379,12 +382,11 @@ class TestCleanNotionDocumentTask:
         )
         db_session_with_containers.add(document)
         db_session_with_containers.flush()
-
+        assert tenant
         # Create segments without index_node_ids
         segments = []
         for i in range(3):
             segment = DocumentSegment(
-                id=str(uuid.uuid4()),
                 tenant_id=tenant.id,
                 dataset_id=dataset.id,
                 document_id=document.id,
@@ -427,8 +429,9 @@ class TestCleanNotionDocumentTask:
             name=fake.name(),
             interface_language="en-US",
             password=generate_valid_password(fake),
+            session=db_session_with_containers,
         )
-        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company(), session=db_session_with_containers)
         tenant = account.current_tenant
 
         # Create dataset
@@ -468,11 +471,10 @@ class TestCleanNotionDocumentTask:
             db_session_with_containers.add(document)
             db_session_with_containers.flush()
             documents.append(document)
-
+            assert tenant
             # Create segments for each document
             for j in range(2):
                 segment = DocumentSegment(
-                    id=str(uuid.uuid4()),
                     tenant_id=tenant.id,
                     dataset_id=dataset.id,
                     document_id=document.id,
@@ -529,8 +531,9 @@ class TestCleanNotionDocumentTask:
             name=fake.name(),
             interface_language="en-US",
             password=generate_valid_password(fake),
+            session=db_session_with_containers,
         )
-        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company(), session=db_session_with_containers)
         tenant = account.current_tenant
 
         # Create dataset
@@ -569,10 +572,9 @@ class TestCleanNotionDocumentTask:
         segment_statuses = [SegmentStatus.WAITING, SegmentStatus.INDEXING, SegmentStatus.COMPLETED, SegmentStatus.ERROR]
         segments = []
         index_node_ids = []
-
+        assert tenant
         for i, status in enumerate(segment_statuses):
             segment = DocumentSegment(
-                id=str(uuid.uuid4()),
                 tenant_id=tenant.id,
                 dataset_id=dataset.id,
                 document_id=document.id,
@@ -630,8 +632,9 @@ class TestCleanNotionDocumentTask:
             name=fake.name(),
             interface_language="en-US",
             password=generate_valid_password(fake),
+            session=db_session_with_containers,
         )
-        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company(), session=db_session_with_containers)
         tenant = account.current_tenant
 
         # Create dataset
@@ -665,10 +668,9 @@ class TestCleanNotionDocumentTask:
         )
         db_session_with_containers.add(document)
         db_session_with_containers.flush()
-
+        assert tenant
         # Create segment
         segment = DocumentSegment(
-            id=str(uuid.uuid4()),
             tenant_id=tenant.id,
             dataset_id=dataset.id,
             document_id=document.id,
@@ -723,8 +725,9 @@ class TestCleanNotionDocumentTask:
             name=fake.name(),
             interface_language="en-US",
             password=generate_valid_password(fake),
+            session=db_session_with_containers,
         )
-        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company(), session=db_session_with_containers)
         tenant = account.current_tenant
 
         # Create dataset
@@ -765,12 +768,11 @@ class TestCleanNotionDocumentTask:
             db_session_with_containers.add(document)
             db_session_with_containers.flush()
             documents.append(document)
-
+            assert tenant
             # Create multiple segments for each document
             num_segments_per_doc = 5
             for j in range(num_segments_per_doc):
                 segment = DocumentSegment(
-                    id=str(uuid.uuid4()),
                     tenant_id=tenant.id,
                     dataset_id=dataset.id,
                     document_id=document.id,
@@ -827,8 +829,11 @@ class TestCleanNotionDocumentTask:
                 name=fake.name(),
                 interface_language="en-US",
                 password=generate_valid_password(fake),
+                session=db_session_with_containers,
             )
-            TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+            TenantService.create_owner_tenant_if_not_exist(
+                account, name=fake.company(), session=db_session_with_containers
+            )
             tenant = account.current_tenant
             accounts.append(account)
             tenants.append(tenant)
@@ -875,7 +880,6 @@ class TestCleanNotionDocumentTask:
             # Create segments for each document
             for j in range(3):
                 segment = DocumentSegment(
-                    id=str(uuid.uuid4()),
                     tenant_id=account.current_tenant.id,
                     dataset_id=dataset.id,
                     document_id=document.id,
@@ -895,8 +899,10 @@ class TestCleanNotionDocumentTask:
 
         # Verify all data exists before cleanup
         # Note: There may be documents from previous tests, so we check for at least 3
-        assert db_session_with_containers.scalar(select(func.count()).select_from(Document)) >= 3
-        assert db_session_with_containers.scalar(select(func.count()).select_from(DocumentSegment)) >= 9
+        document_count = db_session_with_containers.scalar(select(func.count()).select_from(Document)) or 0
+        segment_count = db_session_with_containers.scalar(select(func.count()).select_from(DocumentSegment)) or 0
+        assert document_count >= 3
+        assert segment_count >= 9
 
         # Clean up documents from only the first dataset
         target_dataset = datasets[0]
@@ -934,8 +940,9 @@ class TestCleanNotionDocumentTask:
             name=fake.name(),
             interface_language="en-US",
             password=generate_valid_password(fake),
+            session=db_session_with_containers,
         )
-        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company(), session=db_session_with_containers)
         tenant = account.current_tenant
 
         # Create dataset
@@ -984,11 +991,10 @@ class TestCleanNotionDocumentTask:
             db_session_with_containers.add(document)
             db_session_with_containers.flush()
             documents.append(document)
-
+            assert tenant
             # Create segments for each document
             for j in range(2):
                 segment = DocumentSegment(
-                    id=str(uuid.uuid4()),
                     tenant_id=tenant.id,
                     dataset_id=dataset.id,
                     document_id=document.id,
@@ -1040,8 +1046,9 @@ class TestCleanNotionDocumentTask:
             name=fake.name(),
             interface_language="en-US",
             password=generate_valid_password(fake),
+            session=db_session_with_containers,
         )
-        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company())
+        TenantService.create_owner_tenant_if_not_exist(account, name=fake.company(), session=db_session_with_containers)
         tenant = account.current_tenant
 
         # Create dataset with built-in fields enabled
@@ -1093,10 +1100,9 @@ class TestCleanNotionDocumentTask:
         # Create segments with metadata
         segments = []
         index_node_ids = []
-
+        assert tenant
         for i in range(3):
             segment = DocumentSegment(
-                id=str(uuid.uuid4()),
                 tenant_id=tenant.id,
                 dataset_id=dataset.id,
                 document_id=document.id,

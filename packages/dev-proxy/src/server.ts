@@ -1,7 +1,18 @@
 import type { Context, Hono } from 'hono'
-import type { CookieRewriteOptions, CreateDevProxyAppOptions, DevProxyCorsAllowedOrigins, DevProxyRoute } from './types'
+import type {
+  CookieRewriteOptions,
+  CreateDevProxyAppOptions,
+  DevProxyCorsAllowedOrigins,
+  DevProxyRoute,
+} from './types'
 import { Hono as HonoApp } from 'hono'
-import { rewriteCookieHeaderForUpstream, rewriteSetCookieHeadersForLocal } from './cookies'
+import {
+  getCookieHeaderValue,
+  resolveCookieRewriteLocalScopeKey,
+  rewriteCookieHeaderForUpstream,
+  rewriteSetCookieHeadersForLocal,
+  toScopedLocalCookieName,
+} from './cookies'
 
 const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])
 const ALLOW_METHODS = 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS'
@@ -27,21 +38,24 @@ const appendHeaderValue = (headers: Headers, name: string, value: string) => {
     return
   }
 
-  if (currentValue.split(',').map(item => item.trim()).includes(value))
+  if (
+    currentValue
+      .split(',')
+      .map((item) => item.trim())
+      .includes(value)
+  )
     return
 
   headers.set(name, `${currentValue}, ${value}`)
 }
 
 export const isAllowedLocalDevOrigin = (origin?: string | null) => {
-  if (!origin)
-    return false
+  if (!origin) return false
 
   try {
     const url = new URL(origin)
     return LOCAL_DEV_HOSTS.has(url.hostname)
-  }
-  catch {
+  } catch {
     return false
   }
 }
@@ -50,11 +64,9 @@ export const isAllowedDevOrigin = (
   origin?: string | null,
   allowedOrigins: DevProxyCorsAllowedOrigins = 'local',
 ) => {
-  if (!origin)
-    return false
+  if (!origin) return false
 
-  if (allowedOrigins === 'local')
-    return isAllowedLocalDevOrigin(origin)
+  if (allowedOrigins === 'local') return isAllowedLocalDevOrigin(origin)
 
   return allowedOrigins.includes(origin)
 }
@@ -64,8 +76,7 @@ const applyCorsHeaders = (
   origin: string | undefined | null,
   allowedOrigins: DevProxyCorsAllowedOrigins = 'local',
 ) => {
-  if (!isAllowedDevOrigin(origin, allowedOrigins))
-    return
+  if (!isAllowedDevOrigin(origin, allowedOrigins)) return
 
   headers.set('Access-Control-Allow-Origin', origin!)
   headers.set('Access-Control-Allow-Credentials', 'true')
@@ -74,10 +85,13 @@ const applyCorsHeaders = (
 
 export const buildUpstreamUrl = (target: string, requestPath: string, search = '') => {
   const targetUrl = new URL(target)
-  const normalizedTargetPath = targetUrl.pathname === '/' ? '' : targetUrl.pathname.replace(/\/$/, '')
+  const normalizedTargetPath =
+    targetUrl.pathname === '/' ? '' : targetUrl.pathname.replace(/\/$/, '')
   const normalizedRequestPath = requestPath.startsWith('/') ? requestPath : `/${requestPath}`
-  const hasTargetPrefix = normalizedTargetPath
-    && (normalizedRequestPath === normalizedTargetPath || normalizedRequestPath.startsWith(`${normalizedTargetPath}/`))
+  const hasTargetPrefix =
+    normalizedTargetPath &&
+    (normalizedRequestPath === normalizedTargetPath ||
+      normalizedRequestPath.startsWith(`${normalizedTargetPath}/`))
 
   targetUrl.pathname = hasTargetPrefix
     ? normalizedRequestPath
@@ -96,16 +110,31 @@ const createProxyRequestHeaders = (
   headers.delete('host')
   headers.set('accept-encoding', UPSTREAM_ACCEPT_ENCODING)
 
-  if (headers.has('origin'))
-    headers.set('origin', targetUrl.origin)
+  if (headers.has('origin')) headers.set('origin', targetUrl.origin)
 
   if (cookieRewrite) {
-    const rewrittenCookieHeader = rewriteCookieHeaderForUpstream(headers.get('cookie') || undefined, {
-      ...cookieRewrite,
-      useHostPrefix: targetUrl.protocol === 'https:',
-    })
-    if (rewrittenCookieHeader)
-      headers.set('cookie', rewrittenCookieHeader)
+    const originalCookieHeader = headers.get('cookie') || undefined
+    const localScopeKey = resolveCookieRewriteLocalScopeKey(cookieRewrite, targetUrl)
+    const rewrittenCookieHeader = rewriteCookieHeaderForUpstream(
+      headers.get('cookie') || undefined,
+      {
+        ...cookieRewrite,
+        localScopeKey,
+        useHostPrefix: targetUrl.protocol === 'https:',
+      },
+    )
+    if (rewrittenCookieHeader) headers.set('cookie', rewrittenCookieHeader)
+    else headers.delete('cookie')
+
+    if (localScopeKey && cookieRewrite.csrfHeader) {
+      const scopedCsrfCookieName = toScopedLocalCookieName(
+        cookieRewrite.csrfHeader.cookieName,
+        localScopeKey,
+      )
+      const scopedCsrfToken = getCookieHeaderValue(originalCookieHeader, scopedCsrfCookieName)
+      if (scopedCsrfToken) headers.set(cookieRewrite.csrfHeader.headerName, scopedCsrfToken)
+      else headers.delete(cookieRewrite.csrfHeader.headerName)
+    }
   }
 
   return headers
@@ -114,8 +143,7 @@ const createProxyRequestHeaders = (
 const getSetCookieHeaders = (headers: Headers) => {
   const headersWithGetSetCookie = headers as Headers & { getSetCookie?: () => string[] }
   const setCookieHeaders = headersWithGetSetCookie.getSetCookie?.()
-  if (setCookieHeaders?.length)
-    return setCookieHeaders
+  if (setCookieHeaders?.length) return setCookieHeaders
 
   const setCookie = headers.get('set-cookie')
   return setCookie ? [setCookie] : []
@@ -123,17 +151,24 @@ const getSetCookieHeaders = (headers: Headers) => {
 
 const createUpstreamResponseHeaders = (
   response: Response,
+  targetUrl: URL,
   requestOrigin: string | undefined | null,
   allowedOrigins: DevProxyCorsAllowedOrigins,
   cookieRewrite: CookieRewriteOptions | false | undefined,
 ) => {
   const headers = new Headers(response.headers)
-  RESPONSE_HEADERS_TO_DROP.forEach(header => headers.delete(header))
+  RESPONSE_HEADERS_TO_DROP.forEach((header) => headers.delete(header))
   headers.delete('set-cookie')
 
+  const localScopeKey = cookieRewrite
+    ? resolveCookieRewriteLocalScopeKey(cookieRewrite, targetUrl)
+    : undefined
   const setCookieHeaders = getSetCookieHeaders(response.headers)
   const responseSetCookieHeaders = cookieRewrite
-    ? rewriteSetCookieHeadersForLocal(setCookieHeaders)
+    ? rewriteSetCookieHeadersForLocal(setCookieHeaders, {
+        ...cookieRewrite,
+        localScopeKey,
+      })
     : setCookieHeaders
 
   responseSetCookieHeaders.forEach((cookie) => {
@@ -167,6 +202,7 @@ const proxyRequest = async (
   const upstreamResponse = await fetchImpl(targetUrl, requestInit)
   const responseHeaders = createUpstreamResponseHeaders(
     upstreamResponse,
+    targetUrl,
     context.req.header('origin'),
     allowedOrigins,
     route.cookieRewrite,
@@ -179,7 +215,8 @@ const proxyRequest = async (
   })
 }
 
-const normalizeRoutePaths = (paths: DevProxyRoute['paths']) => Array.isArray(paths) ? paths : [paths]
+const normalizeRoutePaths = (paths: DevProxyRoute['paths']) =>
+  Array.isArray(paths) ? paths : [paths]
 
 const registerProxyRoute = (
   app: Hono,
@@ -191,8 +228,8 @@ const registerProxyRoute = (
   if (!path.startsWith('/'))
     throw new Error(`Invalid dev proxy route path "${path}". Paths must start with "/".`)
 
-  app.all(path, context => proxyRequest(context, route, fetchImpl, allowedOrigins))
-  app.all(`${path}/*`, context => proxyRequest(context, route, fetchImpl, allowedOrigins))
+  app.all(path, (context) => proxyRequest(context, route, fetchImpl, allowedOrigins))
+  app.all(`${path}/*`, (context) => proxyRequest(context, route, fetchImpl, allowedOrigins))
 }
 
 const registerProxyRoutes = (

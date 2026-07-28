@@ -6,9 +6,11 @@ using TestContainers to ensure realistic database interactions and proper isolat
 The task is responsible for removing document segments from the search index when they are disabled.
 """
 
+import logging
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
 from faker import Faker
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -185,30 +187,31 @@ class TestDisableSegmentsFromIndexTask:
         segments = []
 
         for i in range(count):
-            segment = DocumentSegment()
-            segment.id = fake.uuid4()
-            segment.tenant_id = dataset.tenant_id
-            segment.dataset_id = dataset.id
-            segment.document_id = document.id
-            segment.position = i + 1
-            segment.content = f"Test segment content {i + 1}: {fake.text(max_nb_chars=200)}"
-            segment.answer = f"Test answer {i + 1}" if i % 2 == 0 else None
-            segment.word_count = fake.random_int(min=10, max=100)
-            segment.tokens = fake.random_int(min=5, max=50)
-            segment.keywords = [fake.word() for _ in range(3)]
-            segment.index_node_id = f"node_{segment.id}"
-            segment.index_node_hash = fake.sha256()
-            segment.hit_count = 0
-            segment.enabled = True
-            segment.disabled_at = None
-            segment.disabled_by = None
-            segment.status = SegmentStatus.COMPLETED
-            segment.created_by = account.id
-            segment.updated_by = account.id
-            segment.indexing_at = fake.date_time_this_year()
-            segment.completed_at = fake.date_time_this_year()
-            segment.error = None
-            segment.stopped_at = None
+            id = fake.uuid4()
+            segment = DocumentSegment(
+                tenant_id=dataset.tenant_id,
+                dataset_id=dataset.id,
+                document_id=document.id,
+                position=i + 1,
+                content=f"Test segment content {i + 1}: {fake.text(max_nb_chars=200)}",
+                answer=f"Test answer {i + 1}" if i % 2 == 0 else None,
+                word_count=fake.random_int(min=10, max=100),
+                tokens=fake.random_int(min=5, max=50),
+                keywords=[fake.word() for _ in range(3)],
+                index_node_id=f"node_{id}",
+                index_node_hash=fake.sha256(),
+                hit_count=0,
+                enabled=True,
+                disabled_at=None,
+                disabled_by=None,
+                status=SegmentStatus.COMPLETED,
+                created_by=account.id,
+                updated_by=account.id,
+                indexing_at=fake.date_time_this_year(),
+                completed_at=fake.date_time_this_year(),
+                error=None,
+                stopped_at=None,
+            )
 
             segments.append(segment)
 
@@ -532,7 +535,9 @@ class TestDisableSegmentsFromIndexTask:
                     assert result is None  # Task should complete without returning a value
                     mock_factory.assert_called_with(doc_form)
 
-    def test_disable_segments_performance_timing(self, db_session_with_containers: Session):
+    def test_disable_segments_performance_timing(
+        self, db_session_with_containers: Session, caplog: pytest.LogCaptureFixture
+    ):
         """
         Test that the task properly measures and logs performance timing.
 
@@ -561,21 +566,18 @@ class TestDisableSegmentsFromIndexTask:
                 # Mock time.perf_counter to control timing
                 with patch("tasks.disable_segments_from_index_task.time.perf_counter") as mock_perf_counter:
                     mock_perf_counter.side_effect = [1000.0, 1000.5]  # 0.5 seconds execution time
+                    caplog.set_level(logging.INFO, logger="tasks.disable_segments_from_index_task")
 
-                    # Mock logger to capture log messages
-                    with patch("tasks.disable_segments_from_index_task.logger") as mock_logger:
-                        # Act
-                        result = disable_segments_from_index_task(segment_ids, dataset.id, document.id)
+                    # Act
+                    result = disable_segments_from_index_task(segment_ids, dataset.id, document.id)
 
-                        # Assert
-                        assert result is None  # Task should complete without returning a value
+                    # Assert
+                    assert result is None  # Task should complete without returning a value
 
-                        # Verify performance logging
-                        mock_logger.info.assert_called()
-                        log_calls = [call[0][0] for call in mock_logger.info.call_args_list]
-                        performance_log = next((call for call in log_calls if "latency" in call), None)
-                        assert performance_log is not None
-                        assert "0.5" in performance_log  # Should log the execution time
+                    # Verify performance logging
+                    performance_log = next((message for message in caplog.messages if "latency" in message), None)
+                    assert performance_log is not None
+                    assert "0.5" in performance_log  # Should log the execution time
 
     def test_disable_segments_redis_cache_cleanup(self, db_session_with_containers: Session):
         """

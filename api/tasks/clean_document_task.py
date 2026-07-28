@@ -53,7 +53,7 @@ def clean_document_task(document_id: str, dataset_id: str, doc_form: str, file_i
             binding_ids = [binding.id for binding, _ in attachments_with_bindings]
             total_attachment_files.extend([attachment_file.key for _, attachment_file in attachments_with_bindings])
 
-            index_node_ids = [segment.index_node_id for segment in segments]
+            index_node_ids = [segment.index_node_id for segment in segments if segment.index_node_id]
             segment_contents = [segment.content for segment in segments]
         except Exception:
             logger.exception("Cleaned document when document deleted failed")
@@ -71,11 +71,16 @@ def clean_document_task(document_id: str, dataset_id: str, doc_form: str, file_i
         # the vector backend or one of its transitive dependencies was unhappy.
         try:
             index_processor = IndexProcessorFactory(doc_form).init_index_processor()
-            with session_factory.create_session() as session:
+            with session_factory.create_session() as session, session.begin():
                 dataset = session.scalar(select(Dataset).where(Dataset.id == dataset_id).limit(1))
                 if dataset:
                     index_processor.clean(
-                        dataset, index_node_ids, with_keywords=True, delete_child_chunks=True, delete_summaries=True
+                        dataset,
+                        index_node_ids,
+                        with_keywords=True,
+                        delete_child_chunks=True,
+                        delete_summaries=True,
+                        session=session,
                     )
         except Exception:
             logger.exception(

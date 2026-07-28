@@ -8,14 +8,10 @@ type OptionListProps = {
 
 const optionListClassName = cn(
   'flex h-[208px] flex-col gap-y-0.5 overflow-y-auto pb-[184px]',
-  '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+  'scrollbar-none [&::-webkit-scrollbar]:hidden',
 )
 
-const OptionList = ({
-  children,
-  className,
-  ...props
-}: OptionListProps) => {
+const OptionList = ({ children, className, ...props }: OptionListProps) => {
   return (
     <ul className={cn(optionListClassName, className)} {...props}>
       {children}

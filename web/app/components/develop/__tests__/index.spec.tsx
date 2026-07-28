@@ -11,21 +11,14 @@ vi.mock('@/app/components/app/store', () => ({
 
 vi.mock('@/app/components/develop/doc', () => ({
   default: ({ appDetail }: { appDetail: { name?: string } | null }) => (
-    <div data-testid="doc-component">
-      Doc Component -
-      {appDetail?.name}
-    </div>
+    <div data-testid="doc-component">Doc Component -{appDetail?.name}</div>
   ),
 }))
 
 vi.mock('@/app/components/develop/ApiServer', () => ({
-  default: ({ apiBaseUrl, appId }: { apiBaseUrl: string, appId: string }) => (
+  default: ({ apiBaseUrl, appId }: { apiBaseUrl: string; appId: string }) => (
     <div data-testid="api-server">
-      API Server -
-      {apiBaseUrl}
-      {' '}
-      -
-      {appId}
+      API Server -{apiBaseUrl} -{appId}
     </div>
   ),
 }))
@@ -224,13 +217,13 @@ describe('DevelopMain', () => {
 
     it('should have horizontal padding on content', () => {
       const { container } = render(<DevelopMain appId="app-123" />)
-      const content = container.querySelector('.px-4')
+      const content = container.querySelector('.p-4')
       expect(content).toBeInTheDocument()
     })
 
     it('should have vertical padding on content', () => {
       const { container } = render(<DevelopMain appId="app-123" />)
-      const content = container.querySelector('.py-4')
+      const content = container.querySelector('.p-4')
       expect(content).toBeInTheDocument()
     })
 

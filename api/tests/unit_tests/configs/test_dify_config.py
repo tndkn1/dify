@@ -8,6 +8,47 @@ from yarl import URL
 from configs.app_config import DifyConfig
 
 
+def _set_basic_config_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    os.environ.clear()
+    monkeypatch.setenv("CONSOLE_API_URL", "https://example.com")
+    monkeypatch.setenv("CONSOLE_WEB_URL", "https://example.com")
+    monkeypatch.setenv("DB_TYPE", "postgresql")
+    monkeypatch.setenv("DB_USERNAME", "postgres")
+    monkeypatch.setenv("DB_PASSWORD", "postgres")
+    monkeypatch.setenv("DB_HOST", "localhost")
+    monkeypatch.setenv("DB_PORT", "5432")
+    monkeypatch.setenv("DB_DATABASE", "dify")
+
+
+def test_dify_config_keeps_secret_key_empty_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    _set_basic_config_env(monkeypatch)
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.setenv("OPENDAL_FS_ROOT", str(tmp_path))
+
+    config = DifyConfig(_env_file=None)
+
+    assert config.SECRET_KEY == ""
+    assert not hasattr(config, "OPENDAL_FS_ROOT")
+    assert not (tmp_path / ".dify_secret_key").exists()
+
+
+def test_dify_config_preserves_explicit_secret_key(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    _set_basic_config_env(monkeypatch)
+    monkeypatch.setenv("SECRET_KEY", "explicit")
+    monkeypatch.setenv("OPENDAL_FS_ROOT", str(tmp_path))
+
+    config = DifyConfig(_env_file=None)
+
+    assert config.SECRET_KEY == "explicit"
+    assert not (tmp_path / ".dify_secret_key").exists()
+
+
 def test_dify_config(monkeypatch: pytest.MonkeyPatch):
     # clear system environment variables
     os.environ.clear()
@@ -34,6 +75,7 @@ def test_dify_config(monkeypatch: pytest.MonkeyPatch):
     # default values
     assert config.EDITION == "SELF_HOSTED"
     assert config.API_COMPRESSION_ENABLED is False
+    assert config.AGENT_SHELL_ENABLED is True
     assert config.SENTRY_TRACES_SAMPLE_RATE == 1.0
     assert config.TEMPLATE_TRANSFORM_MAX_LENGTH == 400_000
 
@@ -45,6 +87,54 @@ def test_dify_config(monkeypatch: pytest.MonkeyPatch):
 
     # values from pyproject.toml
     assert Version(config.project.version) >= Version("1.0.0")
+
+
+def test_new_user_default_plugin_ids_are_parsed_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_basic_config_env(monkeypatch)
+    monkeypatch.setenv(
+        "NEW_USER_DEFAULT_PLUGIN_IDS",
+        "langgenius/openai, langgenius/gemini",
+    )
+
+    config = DifyConfig(_env_file=None)
+
+    assert config.NEW_USER_DEFAULT_PLUGIN_ID_LIST == [
+        "langgenius/openai",
+        "langgenius/gemini",
+    ]
+
+
+def test_new_user_default_models_are_parsed_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_basic_config_env(monkeypatch)
+    monkeypatch.setenv(
+        "NEW_USER_DEFAULT_MODELS",
+        (
+            "llm:langgenius/openai/openai:gpt-4o-mini, "
+            "text-embedding:langgenius/openai/openai:text-embedding-3-small, "
+            "rerank:langgenius/ollama/ollama:reranker:latest"
+        ),
+    )
+
+    config = DifyConfig(_env_file=None)
+
+    assert config.NEW_USER_DEFAULT_MODEL_LIST == [
+        ("llm", "langgenius/openai/openai", "gpt-4o-mini"),
+        ("text-embedding", "langgenius/openai/openai", "text-embedding-3-small"),
+        ("rerank", "langgenius/ollama/ollama", "reranker:latest"),
+    ]
+
+
+def test_new_user_default_models_reject_duplicate_model_types(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_basic_config_env(monkeypatch)
+    monkeypatch.setenv(
+        "NEW_USER_DEFAULT_MODELS",
+        "llm:langgenius/openai/openai:gpt-4o-mini,llm:langgenius/anthropic/anthropic:claude-sonnet-4",
+    )
+
+    config = DifyConfig(_env_file=None)
+
+    with pytest.raises(ValueError, match="duplicate model type: llm"):
+        _ = config.NEW_USER_DEFAULT_MODEL_LIST
 
 
 def test_http_timeout_defaults(monkeypatch: pytest.MonkeyPatch):
@@ -69,6 +159,25 @@ def test_http_timeout_defaults(monkeypatch: pytest.MonkeyPatch):
     assert config.HTTP_REQUEST_MAX_WRITE_TIMEOUT == 600
 
 
+def test_internal_files_url_falls_back_to_server_console_api_url(monkeypatch: pytest.MonkeyPatch):
+    os.environ.clear()
+    monkeypatch.setenv("SERVER_CONSOLE_API_URL", "http://api:5001")
+
+    config = DifyConfig(_env_file=None)
+
+    assert config.INTERNAL_FILES_URL == "http://api:5001"
+
+
+def test_internal_files_url_prefers_explicit_value(monkeypatch: pytest.MonkeyPatch):
+    os.environ.clear()
+    monkeypatch.setenv("INTERNAL_FILES_URL", "http://files-internal:5001")
+    monkeypatch.setenv("SERVER_CONSOLE_API_URL", "http://api:5001")
+
+    config = DifyConfig(_env_file=None)
+
+    assert config.INTERNAL_FILES_URL == "http://files-internal:5001"
+
+
 # NOTE: If there is a `.env` file in your Workspace, this test might not succeed as expected.
 # This is due to `pymilvus` loading all the variables from the `.env` file into `os.environ`.
 def test_flask_configs(monkeypatch: pytest.MonkeyPatch):
@@ -89,7 +198,7 @@ def test_flask_configs(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("CODE_EXECUTION_ENDPOINT", "http://127.0.0.1:8194/")
 
     # Disable `.env` loading to ensure test stability across environments
-    flask_app.config.from_mapping(DifyConfig(_env_file=None).model_dump())  # pyright: ignore
+    flask_app.config.from_mapping(DifyConfig(_env_file=None).model_dump())
     config = flask_app.config
 
     # configs read from pydantic-settings

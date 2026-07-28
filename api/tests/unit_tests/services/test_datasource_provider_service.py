@@ -177,11 +177,11 @@ class TestDatasourceProviderService:
 
     def test_should_return_true_when_tenant_oauth_params_enabled(self, service, mock_db_session):
         mock_db_session.scalar.return_value = 1
-        assert service.is_tenant_oauth_params_enabled("t1", make_id()) is True
+        assert service.is_tenant_oauth_params_enabled("t1", make_id(), session=mock_db_session) is True
 
     def test_should_return_false_when_tenant_oauth_params_disabled(self, service, mock_db_session):
         mock_db_session.scalar.return_value = 0
-        assert service.is_tenant_oauth_params_enabled("t1", make_id()) is False
+        assert service.is_tenant_oauth_params_enabled("t1", make_id(), session=mock_db_session) is False
 
     # -----------------------------------------------------------------------
     # remove_oauth_custom_client_params (lines 55-61)
@@ -243,7 +243,7 @@ class TestDatasourceProviderService:
             assert service.get_datasource_credentials("t1", "prov", "org/plug") == {}
 
     def test_should_refresh_oauth_tokens_when_expired(self, service, mock_db_session, mock_user):
-        """Expired OAuth credential (expires_at near zero) triggers a silent refresh."""
+        """Expired OAuth credential (expires_at near zero) triggers a refresh."""
         p = MagicMock(spec=DatasourceProvider)
         p.auth_type = "oauth2"
         p.expires_at = 0  # expired
@@ -255,6 +255,24 @@ class TestDatasourceProviderService:
             patch.object(service, "decrypt_datasource_provider_credentials", return_value={"tok": "plain"}),
         ):
             service.get_datasource_credentials("t1", "prov", "org/plug")
+
+    def test_should_include_provider_name_when_refresh_fails(self, service, mock_db_session, mock_user):
+        p = MagicMock(spec=DatasourceProvider)
+        p.id = "cred-id"
+        p.name = "Credential"
+        p.auth_type = "oauth2"
+        p.expires_at = 0
+        p.encrypted_credentials = {"tok": "x"}
+        mock_db_session.scalar.return_value = p
+        with (
+            patch("services.datasource_provider_service.get_current_user", return_value=mock_user),
+            patch("services.datasource_provider_service.OAuthHandler") as oauth_handler,
+            patch.object(service, "get_oauth_client", return_value={"oc": "v"}),
+            patch.object(service, "decrypt_datasource_provider_credentials", return_value={"tok": "plain"}),
+        ):
+            oauth_handler.return_value.refresh_credentials.side_effect = RuntimeError("token endpoint failed")
+            with pytest.raises(ValueError, match="provider prov"):
+                service.get_datasource_credentials("t1", "prov", "org/plug")
 
     def test_should_return_decrypted_credentials_when_api_key_not_expired(self, service, mock_db_session, mock_user):
         """API key credentials with expires_at=-1 skip refresh and return directly."""
@@ -306,6 +324,51 @@ class TestDatasourceProviderService:
         ):
             result = service.get_all_datasource_credentials_by_provider("t1", "prov", "org/plug")
         assert len(result) == 1
+
+    def test_should_skip_failed_provider_when_refreshing_all_credentials(
+        self, service, mock_db_session, mock_user, caplog
+    ):
+        failed_provider = MagicMock(spec=DatasourceProvider)
+        failed_provider.id = "failed-cred"
+        failed_provider.name = "Failed"
+        failed_provider.auth_type = "oauth2"
+        failed_provider.expires_at = 0
+        working_provider = MagicMock(spec=DatasourceProvider)
+        working_provider.id = "working-cred"
+        working_provider.name = "Working"
+        working_provider.auth_type = "oauth2"
+        working_provider.expires_at = 0
+        mock_db_session.scalars.return_value.all.return_value = [failed_provider, working_provider]
+        with (
+            patch("services.datasource_provider_service.get_current_user", return_value=mock_user),
+            patch.object(
+                service,
+                "_refresh_datasource_credentials",
+                side_effect=[ValueError("refresh failed"), ({"t": "enc"}, 9999)],
+            ) as refresh_credentials,
+            patch.object(service, "decrypt_datasource_provider_credentials", return_value={"t": "plain"}),
+        ):
+            result = service.get_all_datasource_credentials_by_provider("t1", "prov", "org/plug")
+        assert result == [{"t": "plain"}]
+        assert refresh_credentials.call_count == 2
+        assert "Skipping datasource credentials for provider prov" in caplog.text
+
+    def test_should_return_valid_credentials_without_refresh_when_getting_all_credentials(
+        self, service, mock_db_session, mock_user
+    ):
+        p = MagicMock(spec=DatasourceProvider)
+        p.auth_type = "oauth2"
+        p.expires_at = -1
+        p.encrypted_credentials = {"t": "x"}
+        mock_db_session.scalars.return_value.all.return_value = [p]
+        with (
+            patch("services.datasource_provider_service.get_current_user", return_value=mock_user),
+            patch.object(service, "_refresh_datasource_credentials") as refresh_credentials,
+            patch.object(service, "decrypt_datasource_provider_credentials", return_value={"t": "plain"}),
+        ):
+            result = service.get_all_datasource_credentials_by_provider("t1", "prov", "org/plug")
+        assert result == [{"t": "plain"}]
+        refresh_credentials.assert_not_called()
 
     # -----------------------------------------------------------------------
     # update_datasource_provider_name (lines 236-303)
@@ -390,7 +453,7 @@ class TestDatasourceProviderService:
         tenant_params.client_params = {"k": "v"}
         mock_db_session.scalar.return_value = tenant_params
         with patch.object(service, "get_oauth_encrypter", return_value=(self._enc, None)):
-            result = service.get_tenant_oauth_client("t1", make_id(), mask=True)
+            result = service.get_tenant_oauth_client("t1", make_id(), mask=True, session=mock_db_session)
         assert result == {"k": "mask"}
 
     def test_should_return_decrypted_credentials_when_mask_is_false(self, service, mock_db_session):
@@ -398,12 +461,12 @@ class TestDatasourceProviderService:
         tenant_params.client_params = {"k": "v"}
         mock_db_session.scalar.return_value = tenant_params
         with patch.object(service, "get_oauth_encrypter", return_value=(self._enc, None)):
-            result = service.get_tenant_oauth_client("t1", make_id(), mask=False)
+            result = service.get_tenant_oauth_client("t1", make_id(), mask=False, session=mock_db_session)
         assert result == {"k": "dec"}
 
     def test_should_return_none_when_no_tenant_oauth_config_exists(self, service, mock_db_session):
         mock_db_session.scalar.return_value = None
-        assert service.get_tenant_oauth_client("t1", make_id()) is None
+        assert service.get_tenant_oauth_client("t1", make_id(), session=mock_db_session) is None
 
     # -----------------------------------------------------------------------
     # get_oauth_client (lines 423-457)
@@ -594,7 +657,7 @@ class TestDatasourceProviderService:
 
     def test_should_return_empty_list_when_no_credentials_stored(self, service, mock_db_session):
         mock_db_session.scalars.return_value.all.return_value = []
-        assert service.list_datasource_credentials("t1", "prov", "org/plug") == []
+        assert service.list_datasource_credentials("t1", "prov", "org/plug", session=mock_db_session) == []
 
     def test_should_return_masked_credentials_list_when_credentials_exist(self, service, mock_db_session):
         p = MagicMock(spec=DatasourceProvider)
@@ -603,7 +666,7 @@ class TestDatasourceProviderService:
         p.is_default = False
         mock_db_session.scalars.return_value.all.return_value = [p]
         with patch.object(service, "extract_secret_variables", return_value=["sk"]):
-            result = service.list_datasource_credentials("t1", "prov", "org/plug")
+            result = service.list_datasource_credentials("t1", "prov", "org/plug", session=mock_db_session)
         assert len(result) == 1
 
     # -----------------------------------------------------------------------
@@ -619,7 +682,9 @@ class TestDatasourceProviderService:
             mock_mgr.return_value.fetch_installed_datasource_providers.return_value = [ds]
             cred = {"credential": {"k": "v"}, "is_default": True}
             with patch.object(service, "list_datasource_credentials", return_value=[cred]):
-                results = service.get_all_datasource_credentials("t1")
+                session = MagicMock()
+                session.scalar.return_value = 0
+                results = service.get_all_datasource_credentials("t1", session=session)
         assert len(results) == 1
 
     def test_should_include_oauth_schema_for_hardcoded_plugin_ids(self, service, mock_db_session):
@@ -644,7 +709,7 @@ class TestDatasourceProviderService:
                 patch.object(service, "is_tenant_oauth_params_enabled", return_value=False),
                 patch.object(service, "is_system_oauth_params_exist", return_value=False),
             ):
-                results = service.get_all_datasource_credentials("t1")
+                results = service.get_all_datasource_credentials("t1", session=mock_db_session)
         assert len(results) == 1
         assert results[0]["oauth_schema"] is not None
 
@@ -654,7 +719,7 @@ class TestDatasourceProviderService:
 
     def test_should_return_empty_list_when_no_real_credentials_exist(self, service, mock_db_session):
         mock_db_session.scalars.return_value.all.return_value = []
-        assert service.get_real_datasource_credentials("t1", "prov", "org/plug") == []
+        assert service.get_real_datasource_credentials("t1", "prov", "org/plug", session=mock_db_session) == []
 
     def test_should_return_decrypted_credential_list_when_credentials_exist(self, service, mock_db_session):
         p = MagicMock(spec=DatasourceProvider)
@@ -662,7 +727,7 @@ class TestDatasourceProviderService:
         p.encrypted_credentials = {"sk": "v"}
         mock_db_session.scalars.return_value.all.return_value = [p]
         with patch.object(service, "extract_secret_variables", return_value=["sk"]):
-            result = service.get_real_datasource_credentials("t1", "prov", "org/plug")
+            result = service.get_real_datasource_credentials("t1", "prov", "org/plug", session=mock_db_session)
         assert len(result) == 1
 
     # -----------------------------------------------------------------------
@@ -725,11 +790,11 @@ class TestDatasourceProviderService:
     def test_should_delete_provider_and_commit_when_found(self, service, mock_db_session):
         p = MagicMock(spec=DatasourceProvider)
         mock_db_session.scalar.return_value = p
-        service.remove_datasource_credentials("t1", "id", "prov", "org/plug")
+        service.remove_datasource_credentials("t1", "id", "prov", "org/plug", session=mock_db_session)
         mock_db_session.delete.assert_called_once_with(p)
 
     def test_should_do_nothing_when_credential_not_found_on_remove(self, service, mock_db_session):
         """No error raised; no delete called when record doesn't exist (lines 994 branch)."""
         mock_db_session.scalar.return_value = None
-        service.remove_datasource_credentials("t1", "id", "prov", "org/plug")
+        service.remove_datasource_credentials("t1", "id", "prov", "org/plug", session=mock_db_session)
         mock_db_session.delete.assert_not_called()

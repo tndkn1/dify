@@ -1,5 +1,13 @@
-"""
-Proxy requests to avoid SSRF
+"""SSRF-protected HTTP client for generic outbound requests.
+
+Use this module when the URL represents a normal external HTTP interaction that
+must go through network/proxy policy exactly as requested, such as HTTP Request
+nodes, provider/API integrations, auth discovery, or custom tool calls.
+
+Do not use this directly for "remote file" retrieval. File downloads, probes,
+and metadata checks should use `core.file.remote_fetcher` instead so Dify-signed
+file URLs can be resolved through DB + storage before falling back to this SSRF
+client.
 """
 
 import logging
@@ -43,13 +51,16 @@ request_error = httpx.RequestError
 max_retries_exceeded_error = MaxRetriesExceededError
 
 
-def _create_proxy_mounts() -> dict[str, httpx.HTTPTransport]:
+def _create_proxy_mounts(verify: bool) -> dict[str, httpx.HTTPTransport]:
+    """Build per-scheme proxy transports with the same TLS policy as the SSRF client."""
     return {
         "http://": httpx.HTTPTransport(
             proxy=dify_config.SSRF_PROXY_HTTP_URL,
+            verify=verify,
         ),
         "https://": httpx.HTTPTransport(
             proxy=dify_config.SSRF_PROXY_HTTPS_URL,
+            verify=verify,
         ),
     }
 
@@ -64,7 +75,7 @@ def _build_ssrf_client(verify: bool) -> httpx.Client:
 
     if dify_config.SSRF_PROXY_HTTP_URL and dify_config.SSRF_PROXY_HTTPS_URL:
         return httpx.Client(
-            mounts=_create_proxy_mounts(),
+            mounts=_create_proxy_mounts(verify=verify),
             verify=verify,
             limits=_SSRF_CLIENT_LIMITS,
         )
@@ -189,7 +200,7 @@ def make_request(method: str, url: str, max_retries: int = SSRF_DEFAULT_MAX_RETR
                         f"The URL may point to a private or local network address. "
                     )
 
-            if response.status_code not in STATUS_FORCELIST:
+            if response.status_code not in STATUS_FORCELIST or max_retries == 0:
                 return response
             else:
                 logger.warning(

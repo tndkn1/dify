@@ -23,22 +23,10 @@ const intersectionObserverMocks = vi.hoisted(() => ({
   callback: null as null | ((entries: Array<{ isIntersecting: boolean }>) => void),
 }))
 
-vi.mock('@/context/app-context', () => ({
-  useSelector: <T,>(selector: (value: { userProfile: { email: string, id?: string, name?: string, avatar?: string, avatar_url?: string, is_password_set?: boolean } }) => T) => selector({
-    userProfile: {
-      id: 'current-user',
-      name: 'Current User',
-      email: 'member@example.com',
-      avatar: '',
-      avatar_url: '',
-      is_password_set: true,
-    },
-  }),
-}))
-
 vi.mock('@/service/access-control', () => ({
   useAppWhiteListSubjects: (...args: unknown[]) => mockUseAppWhiteListSubjects(...args),
-  useSearchForWhiteListCandidates: (...args: unknown[]) => mockUseSearchForWhiteListCandidates(...args),
+  useSearchForWhiteListCandidates: (...args: unknown[]) =>
+    mockUseSearchForWhiteListCandidates(...args),
   useUpdateAccessMode: () => mockUseUpdateAccessMode(),
 }))
 
@@ -50,21 +38,23 @@ vi.mock('ahooks', async (importOriginal) => {
   }
 })
 
-const createGroup = (overrides: Partial<AccessControlGroup> = {}): AccessControlGroup => ({
-  id: 'group-1',
-  name: 'Group One',
-  groupSize: 5,
-  ...overrides,
-} as AccessControlGroup)
+const createGroup = (overrides: Partial<AccessControlGroup> = {}): AccessControlGroup =>
+  ({
+    id: 'group-1',
+    name: 'Group One',
+    groupSize: 5,
+    ...overrides,
+  }) as AccessControlGroup
 
-const createMember = (overrides: Partial<AccessControlAccount> = {}): AccessControlAccount => ({
-  id: 'member-1',
-  name: 'Member One',
-  email: 'member@example.com',
-  avatar: '',
-  avatarUrl: '',
-  ...overrides,
-} as AccessControlAccount)
+const createMember = (overrides: Partial<AccessControlAccount> = {}): AccessControlAccount =>
+  ({
+    id: 'member-1',
+    name: 'Member One',
+    email: 'member@example.com',
+    avatar: '',
+    avatarUrl: '',
+    ...overrides,
+  }) as AccessControlAccount
 
 const baseGroup = createGroup()
 const baseMember = createMember()
@@ -189,7 +179,10 @@ describe('SpecificGroupsOrMembers', () => {
   })
 
   it('should show loading state while pending', async () => {
-    useAccessControlStore.setState({ appId: 'app-1', currentMenu: AccessMode.SPECIFIC_GROUPS_MEMBERS })
+    useAccessControlStore.setState({
+      appId: 'app-1',
+      currentMenu: AccessMode.SPECIFIC_GROUPS_MEMBERS,
+    })
     mockUseAppWhiteListSubjects.mockReturnValue({
       isPending: true,
       data: undefined,
@@ -203,7 +196,10 @@ describe('SpecificGroupsOrMembers', () => {
   })
 
   it('should render fetched groups and members and support removal', async () => {
-    useAccessControlStore.setState({ appId: 'app-1', currentMenu: AccessMode.SPECIFIC_GROUPS_MEMBERS })
+    useAccessControlStore.setState({
+      appId: 'app-1',
+      currentMenu: AccessMode.SPECIFIC_GROUPS_MEMBERS,
+    })
 
     render(<SpecificGroupsOrMembers />)
 
@@ -239,7 +235,11 @@ describe('AddMemberOrGroupDialog', () => {
 
     await user.click(screen.getByText('common.operation.add'))
 
-    expect(screen.getByPlaceholderText('app.accessControlDialog.operateGroupAndMember.searchPlaceholder')).toBeInTheDocument()
+    expect(
+      screen.getByPlaceholderText(
+        'app.accessControlDialog.operateGroupAndMember.searchPlaceholder',
+      ),
+    ).toBeInTheDocument()
     expect(screen.getByText(baseGroup.name)).toBeInTheDocument()
     expect(screen.getByText(baseMember.name)).toBeInTheDocument()
   })
@@ -254,9 +254,7 @@ describe('AddMemberOrGroupDialog', () => {
     await user.click(expandButton)
     expect(useAccessControlStore.getState().selectedGroupsForBreadcrumb).toEqual([baseGroup])
 
-    const memberLabel = screen.getByText(baseMember.name)
-    const memberCheckbox = memberLabel.parentElement?.previousElementSibling as HTMLElement
-    fireEvent.click(memberCheckbox)
+    await user.click(screen.getByRole('option', { name: /Member One/ }))
 
     expect(useAccessControlStore.getState().specificMembers).toEqual([baseMember])
   })
@@ -274,16 +272,21 @@ describe('AddMemberOrGroupDialog', () => {
     render(<AddMemberOrGroupDialog />)
 
     await user.click(screen.getByText('common.operation.add'))
-    await user.type(screen.getByPlaceholderText('app.accessControlDialog.operateGroupAndMember.searchPlaceholder'), 'Group')
+    await user.type(
+      screen.getByPlaceholderText(
+        'app.accessControlDialog.operateGroupAndMember.searchPlaceholder',
+      ),
+      'Group',
+    )
     expect(document.querySelector('.spin-animation')).toBeInTheDocument()
 
-    const groupCheckbox = screen.getByText(baseGroup.name).closest('div')?.previousElementSibling as HTMLElement
-    fireEvent.click(groupCheckbox)
-    fireEvent.click(groupCheckbox)
+    const groupOption = screen.getByRole('option', { name: /Group One/ })
+    fireEvent.click(groupOption)
+    fireEvent.click(groupOption)
 
-    const memberCheckbox = screen.getByText(baseMember.name).parentElement?.previousElementSibling as HTMLElement
-    fireEvent.click(memberCheckbox)
-    fireEvent.click(memberCheckbox)
+    const memberOption = screen.getByRole('option', { name: /Member One/ })
+    fireEvent.click(memberOption)
+    fireEvent.click(memberOption)
 
     fireEvent.click(screen.getByText('app.accessControlDialog.operateGroupAndMember.expand'))
     fireEvent.click(screen.getByText('app.accessControlDialog.operateGroupAndMember.allMembers'))
@@ -307,7 +310,9 @@ describe('AddMemberOrGroupDialog', () => {
 
     await user.click(screen.getByText('common.operation.add'))
 
-    expect(screen.getByText('app.accessControlDialog.operateGroupAndMember.noResult')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'app.accessControlDialog.operateGroupAndMember.noResult',
+    )
   })
 })
 
@@ -326,13 +331,7 @@ describe('AccessControl', () => {
       access_mode: AccessMode.SPECIFIC_GROUPS_MEMBERS,
     } as App
 
-    render(
-      <AccessControl
-        app={app}
-        onClose={onClose}
-        onConfirm={onConfirm}
-      />,
-    )
+    render(<AccessControl app={app} onClose={onClose} onConfirm={onConfirm} />)
 
     await waitFor(() => {
       expect(useAccessControlStore.getState().currentMenu).toBe(AccessMode.SPECIFIC_GROUPS_MEMBERS)
@@ -360,12 +359,7 @@ describe('AccessControl', () => {
       access_mode: AccessMode.PUBLIC,
     } as App
 
-    render(
-      <AccessControl
-        app={app}
-        onClose={vi.fn()}
-      />,
-    )
+    render(<AccessControl app={app} onClose={vi.fn()} />)
 
     expect(screen.getByText('app.accessControlDialog.accessItems.external')).toBeInTheDocument()
     expect(screen.getByText('app.accessControlDialog.accessItems.anyone')).toBeInTheDocument()

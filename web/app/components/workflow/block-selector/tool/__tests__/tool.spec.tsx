@@ -1,3 +1,4 @@
+import { createPreviewCardHandle } from '@langgenius/dify-ui/preview-card'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { trackEvent } from '@/app/components/base/amplitude'
@@ -46,11 +47,9 @@ describe('Tool', () => {
     render(
       <Tool
         payload={createToolProvider({
-          tools: [
-            createTool('tool-a', 'Tool A'),
-            createTool('tool-b', 'Tool B'),
-          ],
+          tools: [createTool('tool-a', 'Tool A'), createTool('tool-b', 'Tool B')],
         })}
+        previewCardHandle={createPreviewCardHandle()}
         viewType={ViewType.flat}
         hasSearchText={false}
         onSelect={onSelect}
@@ -60,12 +59,15 @@ describe('Tool', () => {
     await user.click(screen.getByText('Provider One'))
     await user.click(screen.getByText('Tool B'))
 
-    expect(onSelect).toHaveBeenCalledWith(BlockEnum.Tool, expect.objectContaining({
-      provider_id: 'provider-1',
-      provider_name: 'provider-one',
-      tool_name: 'tool-b',
-      title: 'Tool B',
-    }))
+    expect(onSelect).toHaveBeenCalledWith(
+      BlockEnum.Tool,
+      expect.objectContaining({
+        provider_id: 'provider-1',
+        provider_name: 'provider-one',
+        tool_name: 'tool-b',
+        title: 'Tool B',
+      }),
+    )
     expect(mockTrackEvent).toHaveBeenCalledWith('tool_selected', {
       tool_name: 'tool-b',
       plugin_id: 'plugin-1',
@@ -82,6 +84,7 @@ describe('Tool', () => {
           type: CollectionType.workflow,
           tools: [createTool('workflow-tool', 'Workflow Tool')],
         })}
+        previewCardHandle={createPreviewCardHandle()}
         viewType={ViewType.flat}
         hasSearchText={false}
         onSelect={onSelect}
@@ -90,10 +93,13 @@ describe('Tool', () => {
 
     await user.click(screen.getByText('Workflow Tool'))
 
-    expect(onSelect).toHaveBeenCalledWith(BlockEnum.Tool, expect.objectContaining({
-      provider_type: CollectionType.workflow,
-      tool_name: 'workflow-tool',
-      tool_label: 'Workflow Tool',
-    }))
+    expect(onSelect).toHaveBeenCalledWith(
+      BlockEnum.Tool,
+      expect.objectContaining({
+        provider_type: CollectionType.workflow,
+        tool_name: 'workflow-tool',
+        tool_label: 'Workflow Tool',
+      }),
+    )
   })
 })

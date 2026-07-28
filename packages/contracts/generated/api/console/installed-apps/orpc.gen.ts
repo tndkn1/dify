@@ -2,7 +2,6 @@
 
 import { oc } from '@orpc/contract'
 import * as z from 'zod'
-
 import {
   zDeleteInstalledAppsByInstalledAppIdConversationsByCIdPath,
   zDeleteInstalledAppsByInstalledAppIdConversationsByCIdResponse,
@@ -28,13 +27,16 @@ import {
   zGetInstalledAppsByInstalledAppIdSavedMessagesPath,
   zGetInstalledAppsByInstalledAppIdSavedMessagesQuery,
   zGetInstalledAppsByInstalledAppIdSavedMessagesResponse,
+  zGetInstalledAppsQuery,
   zGetInstalledAppsResponse,
+  zPatchInstalledAppsByInstalledAppIdBody,
   zPatchInstalledAppsByInstalledAppIdConversationsByCIdPinPath,
   zPatchInstalledAppsByInstalledAppIdConversationsByCIdPinResponse,
   zPatchInstalledAppsByInstalledAppIdConversationsByCIdUnpinPath,
   zPatchInstalledAppsByInstalledAppIdConversationsByCIdUnpinResponse,
   zPatchInstalledAppsByInstalledAppIdPath,
   zPatchInstalledAppsByInstalledAppIdResponse,
+  zPostInstalledAppsBody,
   zPostInstalledAppsByInstalledAppIdAudioToTextPath,
   zPostInstalledAppsByInstalledAppIdAudioToTextResponse,
   zPostInstalledAppsByInstalledAppIdChatMessagesBody,
@@ -218,6 +220,7 @@ export const delete_ = oc
     method: 'DELETE',
     operationId: 'deleteInstalledAppsByInstalledAppIdConversationsByCId',
     path: '/installed-apps/{installed_app_id}/conversations/{c_id}',
+    successStatus: 204,
     tags: ['console'],
   })
   .input(z.object({ params: zDeleteInstalledAppsByInstalledAppIdConversationsByCIdPath }))
@@ -381,6 +384,7 @@ export const delete2 = oc
     method: 'DELETE',
     operationId: 'deleteInstalledAppsByInstalledAppIdSavedMessagesByMessageId',
     path: '/installed-apps/{installed_app_id}/saved-messages/{message_id}',
+    successStatus: 204,
     tags: ['console'],
   })
   .input(z.object({ params: zDeleteInstalledAppsByInstalledAppIdSavedMessagesByMessageIdPath }))
@@ -510,6 +514,7 @@ export const delete3 = oc
     method: 'DELETE',
     operationId: 'deleteInstalledAppsByInstalledAppId',
     path: '/installed-apps/{installed_app_id}',
+    successStatus: 204,
     tags: ['console'],
   })
   .input(z.object({ params: zDeleteInstalledAppsByInstalledAppIdPath }))
@@ -523,7 +528,12 @@ export const patch3 = oc
     path: '/installed-apps/{installed_app_id}',
     tags: ['console'],
   })
-  .input(z.object({ params: zPatchInstalledAppsByInstalledAppIdPath }))
+  .input(
+    z.object({
+      body: zPatchInstalledAppsByInstalledAppIdBody,
+      params: zPatchInstalledAppsByInstalledAppIdPath,
+    }),
+  )
   .output(zPatchInstalledAppsByInstalledAppIdResponse)
 
 export const byInstalledAppId = {
@@ -549,6 +559,7 @@ export const get8 = oc
     path: '/installed-apps',
     tags: ['console'],
   })
+  .input(z.object({ query: zGetInstalledAppsQuery.optional() }))
   .output(zGetInstalledAppsResponse)
 
 export const post12 = oc
@@ -559,6 +570,7 @@ export const post12 = oc
     path: '/installed-apps',
     tags: ['console'],
   })
+  .input(z.object({ body: zPostInstalledAppsBody }))
   .output(zPostInstalledAppsResponse)
 
 export const installedApps = {

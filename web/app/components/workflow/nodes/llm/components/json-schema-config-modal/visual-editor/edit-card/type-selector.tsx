@@ -24,12 +24,7 @@ type TypeSelectorProps = {
   popupClassName?: string
 }
 
-const TypeSelector: FC<TypeSelectorProps> = ({
-  items,
-  currentValue,
-  onSelect,
-  popupClassName,
-}) => {
+const TypeSelector: FC<TypeSelectorProps> = ({ items, currentValue, onSelect, popupClassName }) => {
   const [open, setOpen] = useState(false)
 
   return (
@@ -38,9 +33,8 @@ const TypeSelector: FC<TypeSelectorProps> = ({
       onOpenChange={setOpen}
       value={currentValue}
       onValueChange={(nextValue) => {
-        const selected = items.find(item => item.value === nextValue)
-        if (selected)
-          onSelect(selected)
+        const selected = items.find((item) => item.value === nextValue)
+        if (selected) onSelect(selected)
       }}
     >
       <SelectTrigger
@@ -65,8 +59,10 @@ const TypeSelector: FC<TypeSelectorProps> = ({
               value={item.value}
               className="gap-x-1 rounded-lg px-2 py-1"
             >
-              <SelectItemText className="px-1 system-sm-medium text-text-secondary">{item.text}</SelectItemText>
-              {isSelected && <RiCheckLine className="h-4 w-4 text-text-accent" />}
+              <SelectItemText className="px-1 system-sm-medium text-text-secondary">
+                {item.text}
+              </SelectItemText>
+              {isSelected && <RiCheckLine className="size-4 text-text-accent" />}
               <SelectItemIndicator className="hidden" />
             </SelectItem>
           )
